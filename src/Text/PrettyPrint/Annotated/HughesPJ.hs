@@ -58,6 +58,7 @@ module Text.PrettyPrint.Annotated.HughesPJ (
 
         -- * Utility functions for documents
         first, reduceDoc,
+        docLeft, docRight,
 
         -- * Rendering documents
 
@@ -302,6 +303,48 @@ instance NFData TextDetails where
   rnf (Chr c)    = rnf c
   rnf (Str str)  = rnf str
   rnf (PStr str) = rnf str
+
+-- | Split a document in a tuple based on its last non-neutral combination.
+-- The first element is the left side of the combination and the second element
+-- the right part. For example:
+-- > splitDoc (text "hello" <> text "world") == (text "hello", Just $ text "world")
+--
+-- Note that if an empty document is part of a combination, this combination
+-- will not be considered. Therefore:
+-- > splitDoc (empty <> d1 <> d2) == (d1, d2)
+splitDoc :: Doc a -> (Doc a, Maybe (Doc a))
+splitDoc Empty            = (Empty, Nothing)
+splitDoc (NilAbove d)     = (d, Nothing)
+splitDoc (TextBeside _ d) = (d, Nothing)
+splitDoc (Nest _ d)       = (d, Nothing)
+splitDoc (Union ur ul)    = (ur, Just ul)
+splitDoc NoDoc            = (NoDoc, Nothing)
+splitDoc (Beside ld _ rd) = (ld, Just rd)
+splitDoc (Above ud _ ld)  = (ud, Just ld)
+
+-- | Left part of the last non-neutral combination.
+-- It can be used together with 'docTail' to modify the structure
+-- of an existing document.
+--
+-- Note that combinations with empty documents are discarded.
+-- Therefore, the following laws apply:
+-- > docLeft (empty <> d) == docLeft d
+-- > docLeft (d <> empty) == docLeft d
+-- > docLeft (d1 <> d2) == d1
+docLeft :: Doc a -> Doc a
+docLeft = fst . splitDoc
+
+-- | Right part of the last non-neutral combination (if any).
+-- It can be used together with 'docHead' to modify the structure
+-- of an existing document.
+--
+-- Note that combinations with empty documents are discarded.
+-- Therefore, the following laws apply:
+-- > docRight (empty <> d) == docRight d
+-- > docRight (d <> empty) == docRight d
+-- > docRight (d1 <> d2) == Just d2
+docRight :: Doc a -> Maybe (Doc a)
+docRight = snd . splitDoc
 
 -- ---------------------------------------------------------------------------
 -- Values and Predicates on GDocs and TextDetails

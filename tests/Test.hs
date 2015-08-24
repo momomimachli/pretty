@@ -1,10 +1,12 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 -----------------------------------------------------------------------------
 -- Module      :  HughesPJQuickCheck
 -- Copyright   :  (c) 2008 Benedikt Huber
 -- License     :  BSD-style
 --
 -- QuickChecks for HughesPJ pretty printer.
--- 
+--
 -- 1) Testing laws (blackbox)
 --    - CDoc (combinator datatype)
 -- 2) Testing invariants (whitebox)
@@ -27,19 +29,20 @@ import Debug.Trace
 import Test.QuickCheck
 
 main :: IO ()
-main = do
+main = --do
     -- quickcheck tests
-    check_laws
-    check_invariants
-    check_improvements
-    check_non_prims -- hpc full coverage
-    check_rendering
-    check_list_def
-    
+    --check_laws
+    --check_invariants
+    --check_improvements
+    --check_non_prims -- hpc full coverage
+    --check_rendering
+    --check_list_def
+    check_utils
+
     -- unit tests
-    testPP1
-    testT3911
-    testLargeDoc
+    --testPP1
+    --testT3911
+    --testLargeDoc
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 -- Utility functions
@@ -87,18 +90,18 @@ docEq rd1 rd2 = case (rd1, rd2) of
     (Nest k1 d1, Nest k2 d2) | k1 == k2 -> docEq d1 d2
     (Union d11 d12, Union d21 d22) -> docEq d11 d21 && docEq d12 d22
     (d1,d2) -> False
-    
+
 -- algebraic equality, with text reduction
 deq :: Doc () -> Doc () -> Bool
 deq d1 d2 = docEq (reduceDoc' d1) (reduceDoc' d2) where
     reduceDoc' = mergeTexts . reduceDoc
 deqs :: [Doc ()] -> [Doc ()] -> Bool
-deqs ds1 ds2 = 
+deqs ds1 ds2 =
     case zipE ds1 ds2 of
         Nothing    -> False
         (Just zds) -> all (uncurry deq) zds
 
-        
+
 zipLayouts :: Doc () -> Doc () -> Maybe [(Doc (),Doc ())]
 zipLayouts d1 d2 = zipE (reducedDocs d1) (reducedDocs d2)
     where reducedDocs = map mergeTexts . flattenDoc
@@ -201,10 +204,10 @@ Laws for nest
 -}
 prop_n1 x      = nest 0 x                `deq` x
 prop_n2 k k' x = nest k (nest k' x)      `deq` nest (k+k') x
-prop_n3 k k' x  = nest k (nest k' x)      `deq` nest (k+k') x 
+prop_n3 k k' x  = nest k (nest k' x)      `deq` nest (k+k') x
 prop_n4 k x y  = nest k (x $$ y)         `deq` nest k x $$ nest k y
 prop_n5 k     =  nest k empty            `deq` empty
-prop_n6 x k y =  not (isEmpty x) ==>  
+prop_n6 x k y =  not (isEmpty x) ==>
                  x <> nest k y           `deq` x <> y
 check_n = do
     putStrLn "Nest laws"
@@ -216,13 +219,13 @@ check_n = do
     myTest "n6" (\k -> liftDoc2 (\x -> prop_n6 x k))
 
 {-
-<m1>    (text s <> x) $$ y = text s <> ((text "" <> x)) $$ 
+<m1>    (text s <> x) $$ y = text s <> ((text "" <> x)) $$
                                          nest (-length s) y)
 
 <m2>    (x $$ y) <> z = x $$ (y <> z)
         if y non-empty
--}    
-prop_m1 s x y = (text' s <> x) $$ y `deq` text' s <> ((text "" <> x) $$ 
+-}
+prop_m1 s x y = (text' s <> x) $$ y `deq` text' s <> ((text "" <> x) $$
                  nest (-length (unText s)) y)
 prop_m2 x y z = not (isEmpty y) ==>
                 (x $$ y) <> z      `deq` x $$ (y <> z)
@@ -240,14 +243,14 @@ Laws for list versions
 [ Fails for fill ! ]
 <l2>    nest k (sep ps) = sep (map (nest k) ps)
         ...ditto hsep, hcat, vcat, fill...
--}    
-prop_l1 sp ps qs = 
+-}
+prop_l1 sp ps qs =
     sp (ps++[empty]++qs)   `rdeq` sp (ps ++ qs)
 prop_l2 sp k ps  = nest k (sep ps)        `deq` sep (map (nest k) ps)
 
 
 prop_l1' sp cps cqs =
-    let [ps,qs] = map buildDocList [cps,cqs] in 
+    let [ps,qs] = map buildDocList [cps,cqs] in
     layoutCountBounded maxLayouts (sp (ps++qs)) ==> prop_l1 sp ps qs
 prop_l2' sp k  ps = prop_l2 sp k (buildDocList ps)
 check_l = do
@@ -262,13 +265,13 @@ prop_l1_fail_2 = [ text "a" $$  text "b" ]
 Laws for oneLiner
 ~~~~~~~~~~~~~~~~~
 <o1>    oneLiner (nest k p) = nest k (oneLiner p)
-<o2>    oneLiner (x <> y)   = oneLiner x <> oneLiner y 
+<o2>    oneLiner (x <> y)   = oneLiner x <> oneLiner y
 
 [One liner only takes reduced arguments]
--}    
+-}
 oneLinerR = oneLiner . reduceDoc
 prop_o1 k p = oneLinerR (nest k p) `deq` nest k (oneLinerR p)
-prop_o2 x y = oneLinerR (x <> y) `deq` oneLinerR x <> oneLinerR y 
+prop_o2 x y = oneLinerR (x <> y) `deq` oneLinerR x <> oneLinerR y
 
 check_o = do
     putStrLn "oneliner laws"
@@ -304,23 +307,23 @@ sepDef docs = let ds = filter (not . isEmpty) docs in
               case ds of
                   [] -> empty
                   [d] -> d
-                  ds -> reduceDoc (oneLiner (reduceDoc $ hsep ds) 
+                  ds -> reduceDoc (oneLiner (reduceDoc $ hsep ds)
                                     `Union`
                                   (reduceDoc $ foldr ($+$) empty ds))
 
-check_list_def = do 
-    myTest "hcat def" (prop_hcat . buildDocList) 
-    myTest "hsep def" (prop_hsep . buildDocList) 
-    myTest "vcat def" (prop_vcat . buildDocList) 
+check_list_def = do
+    myTest "hcat def" (prop_hcat . buildDocList)
+    myTest "hsep def" (prop_hsep . buildDocList)
+    myTest "vcat def" (prop_vcat . buildDocList)
     -- XXX: Not sure if this is meant to fail (I added the expectFailure [DT])
     myTest "sep def" (expectFailure . prop_sep . buildDocList)
 
 {-
 Definition of fill (fcat/fsep)
--- Specification: 
+-- Specification:
 --   fill []  = empty
 --   fill [p] = p
---   fill (p1:p2:ps) = oneLiner p1 <#> nest (length p1) 
+--   fill (p1:p2:ps) = oneLiner p1 <#> nest (length p1)
 --                                          (fill (oneLiner p2 : ps))
 --                     `union`
 --                      p1 $$ fill ps
@@ -332,9 +335,9 @@ Definition of fill (fcat/fsep)
 --   fillIndent k (p1:p2:ps) =
 --      oneLiner p1 <g> fillIndent (k + length p1 + g ? 1 : 0) (remove_nests (oneLiner p2) : ps)
 --       `Union`
---      (p1 $*$ nest (-k) (fillIndent 0 ps)) 
+--      (p1 $*$ nest (-k) (fillIndent 0 ps))
 --
--- $*$ is defined for layouts (not Docs) as 
+-- $*$ is defined for layouts (not Docs) as
 -- layout1 $*$ layout2 | isOneLiner layout1 = layout1 $+$ layout2
 --                     | otherwise          = layout1 $$ layout2
 --
@@ -356,7 +359,7 @@ Definition of fill (fcat/fsep)
 -- expected: (nest 1; text "a"; text "b"; nest -3; "c")
 -- actual  : (nest 1; text "a"; text "b"; nest -5; "c")
 -- === (nest 1; text a) <> (fill (-2) (p2:ps))
--- ==>                     (nest 2 (text "b") $+$ text "c")    
+-- ==>                     (nest 2 (text "b") $+$ text "c")
 -- ==>                     (nest 2 (text "b") `nilabove` nest (-3) (text "c"))
 -- ==> (nest 1; text a; text b; nest -5 c)
 
@@ -376,7 +379,7 @@ prop_fcat_old ds = fillOld2 False ds `rdeq` fillDef False (filter (not . isEmpty
 prop_fcat_old_old :: [Doc ()] -> Bool
 prop_fcat_old_old ds = fillOld2 False ds `rdeq` fillDefOld False (filter (not . isEmpty) ds)
 
-prop_restrict_sz :: (Testable a) => Int -> ([Doc ()] -> a) -> ([Doc ()] -> Property) 
+prop_restrict_sz :: (Testable a) => Int -> ([Doc ()] -> a) -> ([Doc ()] -> Property)
 prop_restrict_sz k p ds = layoutCountBounded k (fsep ds) ==> p ds
 
 prop_restrict_ol :: (Testable a) => ([Doc ()] -> a) -> ([Doc ()] -> Property)
@@ -389,7 +392,7 @@ fillDef :: Bool -> [Doc ()] -> Doc ()
 fillDef g = normalize . fill' 0 . filter (not.isEmpty) . map reduceDoc
   where
     fill' _ [] = Empty
-    fill' _ [x] = x    
+    fill' _ [x] = x
     fill' k (p1:p2:ps) =
         reduceDoc (oneLiner p1 `append` (fill' (k + firstLineLength p1 + (if g then 1 else 0)) $ (oneLiner' p2) : ps))
             `union`
@@ -397,7 +400,7 @@ fillDef g = normalize . fill' 0 . filter (not.isEmpty) . map reduceDoc
 
     union = Union
 
-    append = if g then (<+>) else (<>)    
+    append = if g then (<+>) else (<>)
 
     oneLiner' (Nest k d) = oneLiner' d
     oneLiner' d          = oneLiner d
@@ -405,16 +408,16 @@ fillDef g = normalize . fill' 0 . filter (not.isEmpty) . map reduceDoc
 ($*$) :: RDoc () -> RDoc () -> RDoc ()
 ($*$) p ps = case flattenDoc p of
     [] -> NoDoc
-    ls -> foldr1 Union (map combine ls) 
+    ls -> foldr1 Union (map combine ls)
     where
     combine p | isOneLiner p = p $+$ ps
               | otherwise    = p $$  ps
 
 fillDefOld :: Bool -> [Doc ()] -> Doc ()
-fillDefOld g = normalize . fill' . filter (not.isEmpty) . map normalize where 
+fillDefOld g = normalize . fill' . filter (not.isEmpty) . map normalize where
     fill' [] = Empty
     fill' [p1] = p1
-    fill' (p1:p2:ps) = (normalize (oneLiner p1 `append` nest (firstLineLength p1) 
+    fill' (p1:p2:ps) = (normalize (oneLiner p1 `append` nest (firstLineLength p1)
                                          (fill' (oneLiner p2 : ps))))
                     `union`
                      (p1 $$ fill' (p2:ps))
@@ -425,12 +428,12 @@ check_fill_prop :: Testable a => String -> ([Doc ()] -> a) -> IO ()
 check_fill_prop msg p = myTest msg (prop_restrict_sz maxLayouts p . buildDocList)
 
 check_fill_def_fail :: IO ()
-check_fill_def_fail = do 
+check_fill_def_fail = do
     check_fill_prop "fcat defOld vs fcatOld (ol)" (prop_restrict_ol prop_fcat_old_old)
     check_fill_prop "fcat defOld vs fcatOld" prop_fcat_old_old
 
     check_fill_prop "fcat def (ol) vs fcatOld" (prop_restrict_ol prop_fcat_old)
-    check_fill_prop "fcat def vs fcatOld" prop_fcat_old 
+    check_fill_prop "fcat def vs fcatOld" prop_fcat_old
 
 check_fill_def_ok :: IO ()
 check_fill_def_ok = do
@@ -460,7 +463,7 @@ Zero width text (Neil)
 Here it would be convenient to generate functions (or replace empty / text bz z-w-t)
 -}
 -- TODO
-{- 
+{-
 All laws: monoid, text, nest, misc, list versions, oneLiner, list def
 -}
 check_laws :: IO ()
@@ -484,7 +487,7 @@ stop a = (a,False)
 
 recurse :: a -> (a, Bool)
 recurse a = (a,True)
--- strategy: generic synthesize with stop condition 
+-- strategy: generic synthesize with stop condition
 -- terms are combined top-down, left-right (latin text order)
 genericProp :: (a -> a -> a) -> (Doc () -> (a,Bool)) -> Doc () -> a
 genericProp c q doc =
@@ -514,15 +517,15 @@ prop_inv1 d = genericProp (&&) nilAboveNotEmpty d where
     nilAboveNotEmpty _ = recurse True
 
 {-
-  * The argument of @TextBeside@ is never @Nest@.  
+  * The argument of @TextBeside@ is never @Nest@.
 -}
 prop_inv2 :: Doc () -> Bool
 prop_inv2 = genericProp (&&) textBesideNotNest where
     textBesideNotNest (TextBeside _ (Nest _ _)) = stop False
     textBesideNotNest _ = recurse True
 {-
-  * The layouts of the two arguments of @Union@ both flatten to the same 
-    string 
+  * The layouts of the two arguments of @Union@ both flatten to the same
+    string
 -}
 prop_inv3 :: Doc () -> Bool
 prop_inv3 = genericProp (&&) unionsFlattenSame where
@@ -543,7 +546,7 @@ prop_inv4 = genericProp (&&) unionArgs where
     goodUnionArg (TextBeside _ _) = True
     goodUnionArg (NilAbove _) = True
     goodUnionArg _ = False
-  
+
 {-
   * A @NoDoc@ may only appear on the first line of the left argument of
     an union. Therefore, the right argument of an union can never be equivalent
@@ -594,12 +597,12 @@ prop_inv7 = genericProp (&&) firstLonger where
     firstLonger (Union d1 d2) = (firstLineLength d1 >= firstLineLength d2, True)
     firstLonger _ = (True, True)
 
-{- 
+{-
    * If we take as precondition: the arguments of cat,sep,fill do not start with Nest, invariant 7 holds
 -}
 prop_inv7_pre :: CDoc -> Bool
 prop_inv7_pre cdoc = nestStart True cdoc where
-  nestStart nestOk doc = 
+  nestStart nestOk doc =
     case doc of
         CList sep ds     -> all (nestStart False) ds
         CBeside _ d1 d2  -> nestStart nestOk d1 && nestStart (not . isEmpty $ buildDoc d1) d2
@@ -613,7 +616,7 @@ prop_inv7_pre cdoc = nestStart True cdoc where
 -}
 prop_inv7_a :: CDoc -> Property
 prop_inv7_a cdoc = prop_inv7_pre cdoc ==> prop_inv7 (buildDoc cdoc)
-    
+
 check_invariants :: IO ()
 check_invariants = do
     myTest "Invariant 1" (prop_inv1 . buildDoc)
@@ -626,12 +629,12 @@ check_invariants = do
     -- XXX: Not sure if this is meant to fail (I added the expectFailure [DT])
     myTest "Invariant 7 (fails in HughesPJ:20080621)" (expectFailure . prop_inv7 . buildDoc)
 
--- `negative indent' 
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+-- `negative indent'
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-{-  
+{-
    In the documentation we have:
-   
+
    (spaces n) generates a list of n spaces
    It should never be called with 'n' < 0, but that can happen for reasons I don't understand
 
@@ -651,7 +654,7 @@ prop_negative_indent cdoc = noNegNest cdoc ==> noNegSpaces (buildDoc cdoc)
 noNegNest = genericCProp (&&) notIsNegNest where
     notIsNegNest (CNest k _) | k < 0 = stop False
     notIsNegNest  _                  = recurse True
-noNegSpaces = go 0 . reduceDoc where 
+noNegSpaces = go 0 . reduceDoc where
     go k Empty = True
     go k (NilAbove d) = go k d
     go k (TextBeside _ d) | k < 0 = False
@@ -690,17 +693,17 @@ while(true)
   /* indented comment */
 skip;
 -}
-                        
+
 -- (3) Touching non-prims
 -- ~~~~~~~~~~~~~~~~~~~~~~
 
 check_non_prims :: IO ()
 check_non_prims = do
-    myTest "Non primitive: show = renderStyle style" $ \cd -> let d = buildDoc cd in 
+    myTest "Non primitive: show = renderStyle style" $ \cd -> let d = buildDoc cd in
         show ((zeroWidthText "a") <> d) /= renderStyle style d
     myAssert "symbols" $
         (semi <> comma <> colon <> equals <> lparen <> rparen <> lbrack <> rbrack <> lbrace <> rbrace)
-            `deq` 
+            `deq`
         (text ";,:=()[]{}")
     myAssert "quoting" $
         (quotes . doubleQuotes . parens . brackets .braces $ (text "a" $$ text "b"))
@@ -709,22 +712,22 @@ check_non_prims = do
     myAssert "numbers" $
         fsep [int 42, integer 42, float 42, double 42, rational 42]
         `rdeq`
-        (fsep . map text) 
+        (fsep . map text)
             [show (42 :: Int), show (42 :: Integer), show (42 :: Float), show (42 :: Double), show (42 :: Rational)]
-    myTest "Definition of <+>" $ \cd1 cd2 -> 
-        let (d1,d2) = (buildDoc cd1, buildDoc cd2) in 
+    myTest "Definition of <+>" $ \cd1 cd2 ->
+        let (d1,d2) = (buildDoc cd1, buildDoc cd2) in
         layoutsCountBounded maxLayouts [d1,d2] ==>
         not (isEmpty d1) && not (isEmpty d2)   ==>
-        d1 <+> d2 `rdeq` d1 <> space <> d2 
-        
+        d1 <+> d2 `rdeq` d1 <> space <> d2
+
     myTest "hang" $ liftDoc2 (\d1 d2 -> hang d1 2 d2 `deq` sep [d1, nest 2 d2])
-    
+
     let pLift f cp cds = f (buildDoc cp) (buildDocList cds)
     myTest "punctuate" $ pLift (\p ds -> (punctuate p ds) `deqs` (punctuateDef p ds))
 
 check_rendering = do
-    myTest' 20 10000 "one - line rendering" $ \cd -> 
-        let d = buildDoc cd in        
+    myTest' 20 10000 "one - line rendering" $ \cd ->
+        let d = buildDoc cd in
         (renderStyle (Style OneLineMode undefined undefined) d) == oneLineRender d
     myTest' 20 10000 "left-mode rendering" $ \cd ->
         let d = buildDoc cd in
@@ -735,7 +738,7 @@ check_rendering = do
     myTest' 20 10000 "zigzag mode rendering" $ \cd ->
         let d = buildDoc cd in
         extractTextZZ (renderStyle (Style ZigZagMode 6 1.7) d) == extractText (oneLineRender d)
-        
+
 extractText :: String -> String
 extractText = filter (not . isSpace)
 
@@ -744,10 +747,10 @@ extractTextZZ = filter (\c -> not (isSpace c) && c /= '/' && c /= '\\')
 
 punctuateDef :: Doc () -> [Doc ()] -> [Doc ()]
 punctuateDef p [] = []
-punctuateDef p ps = 
+punctuateDef p ps =
     let (dsInit,dLast) = (init ps, last ps) in
     map (\d -> d <> p) dsInit ++ [dLast]
-       
+
 -- (4) QuickChecking improvments and bug fixes
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -764,7 +767,7 @@ prop_fill_empty_reduce ds = fill True ds `deq` fillOld True (filter (not.isEmpty
 
 check_improvements :: IO ()
 check_improvements = do
-    myTest "fill = fillOld . filter (not.isEmpty) [if no argument starts with nest]" 
+    myTest "fill = fillOld . filter (not.isEmpty) [if no argument starts with nest]"
            (prop_fill_empty_reduce . filter (not .isNest) . buildDocList)
 
 -- old implementation of fill
@@ -791,7 +794,7 @@ fillOld g (p:ps) = fill1 g (reduceDoc p) 0 ps where
     fillNB g (Nest _ p)  k ys  = fillNB g p k ys
     fillNB _ Empty _ []        = Empty
     fillNB g Empty k (y:ys)    = nilBeside g (fill1 g (oneLiner (reduceDoc y)) k1 ys)
-                                 `mkUnion` 
+                                 `mkUnion`
                                  nilAboveNest False k (fillOld g (y:ys))
                                where
                                  k1 | g         = k - 1
@@ -799,10 +802,10 @@ fillOld g (p:ps) = fill1 g (reduceDoc p) 0 ps where
     fillNB g p k ys            = fill1 g p k ys
 
 
--- Specification: 
+-- Specification:
 --   fill []  = empty
 --   fill [p] = p
---   fill (p1:p2:ps) = oneLiner p1 <#> nest (length p1) 
+--   fill (p1:p2:ps) = oneLiner p1 <#> nest (length p1)
 --                                          (fill (oneLiner p2 : ps))
 --                     `union`
 --                      p1 $$ fill ps
@@ -833,7 +836,7 @@ fillOld2 g (p:ps) = fill1 g (reduceDoc p) 0 ps where
     fillNB g p k ys            = fill1 g p k ys
 
     fillNBE g k y ys           = nilBeside g (fill1 g (oneLiner (reduceDoc y)) k1 ys)
-                                 `mkUnion` 
+                                 `mkUnion`
                                  nilAboveNest True k (fill g (y:ys))
                                where
                                  k1 | g         = k - 1
@@ -842,8 +845,8 @@ fillOld2 g (p:ps) = fill1 g (reduceDoc p) 0 ps where
 -- (5) Pretty printing RDocs and RDOC properties
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 prettyDoc :: Doc () -> Doc ()
-prettyDoc d = 
-    case reduceDoc d of 
+prettyDoc d =
+    case reduceDoc d of
         Empty            -> text "empty"
         NilAbove d       -> (text "nilabove") <> semi <+> (prettyDoc d)
         TextBeside s d   -> (text ("text \""++tdToStr (annotToTd s) ++ "\"" ++ show (annotSize s))) <> semi <+> (prettyDoc d)
@@ -863,7 +866,7 @@ flattenDoc d = flatten (reduceDoc d) where
     flatten (Union d1 d2) = flattenDoc d1 ++ flattenDoc d2
     flatten (Beside d1 b d2) = error $ "flattenDoc Beside"
     flatten (Above d1 b d2) = error $ "flattenDoc Above"
-  
+
 normalize :: Doc () -> RDoc ()
 normalize d = norm d where
     norm NoDoc = NoDoc
@@ -873,7 +876,7 @@ normalize d = norm d where
     norm (TextBeside s d) = (TextBeside s) (norm d)
     norm (Nest k (Nest k' d)) = norm $ Nest (k+k') d
     norm (Nest 0 d) = norm d
-    norm (Nest k d) = (Nest k) (norm d)  
+    norm (Nest k d) = (Nest k) (norm d)
     --   * The arguments of @Union@ are either @TextBeside@, or @NilAbove@.
     norm (Union d1 d2) = normUnion (norm d1) (norm d2)
     norm d@(Beside d1 b d2) = norm (reduceDoc d)
@@ -896,7 +899,7 @@ topLevelCTor d = tlc d where
     tlc (Union d1 d2) = "Union"
     tlc (Above _ _ _) = "Above"
     tlc (Beside _ _ _) = "Beside"
-    
+
 -- normalize TextBeside (and consequently apply some laws for simplification)
 mergeTexts :: RDoc () -> RDoc ()
 mergeTexts = merge where
@@ -910,7 +913,7 @@ mergeTexts = merge where
     mergeText t1 t2 =
       NoAnnot (Str $ tdToStr (annotToTd t1) ++ tdToStr (annotToTd t2))
               (annotSize t1 + annotSize t2)
-    
+
 isOneLiner :: RDoc () -> Bool
 isOneLiner = genericProp (&&) iol where
     iol (NilAbove _) = stop False
@@ -936,10 +939,10 @@ extractTexts = map normWS . genericProp combine go where
     -- modulo whitespace
     normWS txt = filter (not . isWS) txt where
         isWS ws | ws == ' ' || ws == '\n' || ws == '\t'  = True
-                | otherwise = False 
-                
+                | otherwise = False
+
 emptyReduction :: Doc () -> Doc ()
-emptyReduction doc = 
+emptyReduction doc =
     case doc of
             Empty             -> Empty
             NilAbove d        -> case emptyReduction d of Empty -> Empty ; d' -> NilAbove d'
@@ -964,7 +967,7 @@ abstractLayout :: Doc () -> [(Int,String)]
 abstractLayout d = cal 0 Nothing (reduceDoc d) where
     --   current column -> this line -> doc -> [(indent,line)]
     cal :: Int -> (Maybe (Int,String)) -> Doc () -> [(Int,String)]
-    cal k cur Empty = [ addTextEOL k (Str "") cur ]    
+    cal k cur Empty = [ addTextEOL k (Str "") cur ]
     cal k cur (NilAbove d) = (addTextEOL k (Str "") cur) : cal k Nothing d
     cal k cur (TextBeside s d) = cal (k + annotSize s) (addText k s cur) d
     cal k cur (Nest n d) = cal (k+n) cur d
@@ -978,7 +981,7 @@ abstractLayout d = cal 0 Nothing (reduceDoc d) where
 
 docifyLayout :: [(Int,String)] -> Doc ()
 docifyLayout = vcat . map (\(k,t) -> nest k (text t))
-    
+
 oneLineRender :: Doc () -> String
 oneLineRender = olr . abstractLayout . last . flattenDoc where
     olr = concat . intersperse " " . map snd
@@ -993,4 +996,34 @@ firstLineIsLeftMost = all (firstIsLeftMost . abstractLayout) . flattenDoc where
 noNegativeIndent :: Doc () -> Bool
 noNegativeIndent = all (noNegIndent . abstractLayout) . flattenDoc where
     noNegIndent = all ( (>= 0) . fst)
-    
+
+-- (6) Utility functions for documents
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+instance Arbitrary (Doc () -> Doc () -> Doc ()) where
+    arbitrary = elements [(<>), (<+>), ($$), ($+$)]
+
+check_utils :: IO ()
+check_utils = do
+    myTest "Doc left properties"  prop_docLeft
+    myTest "Doc right properties" prop_docRight
+
+prop_docLeft :: CDoc -> CDoc -> Bool
+prop_docLeft d1 d2 =
+    case (d1', d2') of
+        (Empty, dr) -> docLeft (Empty <+> dr) == docLeft dr
+        (dl, Empty) -> docLeft (dl <+> Empty) == docLeft dl
+        (dl, dr)    -> docLeft (dl <+> dr) == dl
+    where
+        d1' = buildDoc d1
+        d2' = buildDoc d2
+
+prop_docRight:: CDoc -> CDoc -> Bool
+prop_docRight d1 d2 =
+    case (d1', d2') of
+        (Empty, dr) -> docRight (Empty <+> dr) == docRight dr
+        (dl, Empty) -> docRight (dl <+> Empty) == docRight dl
+        (dl, dr)    -> docRight (dl <+> dr) == Just dr
+    where
+        d1' = buildDoc d1
+        d2' = buildDoc d2

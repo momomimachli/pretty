@@ -63,6 +63,7 @@ module Text.PrettyPrint.HughesPJ (
 
         -- * Utility functions for documents
         first, reduceDoc,
+        docLeft, docRight,
 
         -- * Rendering documents
 
@@ -144,6 +145,30 @@ instance Eq Doc where
 
 instance NFData Doc where
   rnf (Doc a) = rnf a
+
+-- | Left part of the last non-neutral combination.
+-- It can be used together with 'docTail' to modify the structure
+-- of an existing document.
+--
+-- Note that combinations with empty documents are discarded.
+-- Therefore, the following laws apply:
+-- > docLeft (empty <> d) == docLeft d
+-- > docLeft (d <> empty) == docLeft d
+-- > docLeft (d1 <> d2) == d1
+docLeft :: Doc -> Doc
+docLeft (Doc d) = Doc $ Ann.docLeft d
+
+-- | Right part of the last non-neutral combination (if any).
+-- It can be used together with 'docHead' to modify the structure
+-- of an existing document.
+--
+-- Note that combinations with empty documents are discarded.
+-- Therefore, the following laws apply:
+-- > docRight (empty <> d) == docRight d
+-- > docRight (d <> empty) == docRight d
+-- > docRight (d1 <> d2) == Just d2
+docRight :: Doc -> Maybe Doc
+docRight (Doc d) = fmap Doc $ Ann.docRight d
 
 -- ---------------------------------------------------------------------------
 -- Values and Predicates on GDocs and TextDetails
@@ -441,4 +466,3 @@ fullRender :: Mode                     -- ^ Rendering mode
 fullRender m lineLen ribbons txt rest (Doc doc)
   = Ann.fullRender m lineLen ribbons txt rest doc
 {-# INLINE fullRender #-}
-
